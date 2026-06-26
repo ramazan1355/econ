@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECO.N — Urban Bio-Cooling Network</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+    <style>
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+        :root {
+            --black:  #000;
+            --panel:  #0d0d0d;
+            --border: #1a1a1a;
+            --mid:    #555;
+            --light:  #888;
+            --white:  #f0f0f0;
+            --green:  #00ff41;
+            --green2: #00c832;
+        }
+
+        html, body { width:100%; height:100%; overflow:hidden; }
+
+        body {
+            background: var(--black);
+            color: var(--white);
+            font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 13px;
+        }
+
+        #shell {
+            display: grid;
+            grid-template-rows: 52px 1fr;
+            height: 100vh;
+        }
+
+        /* ── TOPBAR ── */
+        #topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 28px;
+            border-bottom: 1px solid var(--border);
+            background: var(--black);
+        }
+
+        .tb-brand {
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .tb-brand .dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 10px var(--green);
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+        .tb-sub {
+            font-size: 11px;
+            color: var(--mid);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .tb-right {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: var(--light);
+            letter-spacing: 1px;
+        }
+
+        /* ── BODY ── */
+        #body {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            height: calc(100vh - 52px);
+        }
+
+        /* ── MAP ── */
+        #map-wrap { background: var(--black); overflow: hidden; }
+        #map { width:100%; height:100%; }
+        .leaflet-container { background: #000 !important; }
+
+        /* ── SIDEBAR ── */
+        #sidebar {
+            background: var(--black);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .card {
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .card-title {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--mid);
+            margin-bottom: 14px;
+        }
+
+        /* ── WEATHER CARD ── */
+        .weather-main {
+            display: flex;
+            align-items: flex-end;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .temp-big {
+            font-size: 64px;
+            font-weight: 100;
+            letter-spacing: -4px;
+            line-height: 1;
+            color: var(--white);
+        }
+
+        .temp-big .deg {
+            font-size: 22px;
+            font-weight: 300;
+            color: var(--mid);
+            letter-spacing: 0;
+        }
+
+        .weather-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding-bottom: 8px;
+        }
+
+        .w-city   { font-size: 15px; font-weight: 700; }
+        .w-cond   { font-size: 12px; color: var(--mid); }
+        .w-coords { font-size: 10px; color: var(--border); font-family: 'Courier New', monospace; }
+
+        .weather-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1px;
+            background: var(--border);
+            margin: 0 -22px -18px;
+        }
+
+        .ws-item {
+            background: var(--black);
+            padding: 10px 14px;
+        }
+
+        .ws-label { font-size: 9px; text-transform:uppercase; letter-spacing:1px; color:var(--mid); margin-bottom:4px; }
+        .ws-val   { font-size: 16px; font-weight: 700; font-family: 'Courier New', monospace; }
+
+        /* ── HEAT INDEX ── */
+        .hi-track {
+            height: 4px;
+            background: linear-gradient(90deg, #00ff41 0%, #aaff00 30%, #ffe600 55%, #ff8c00 75%, #ff2200 100%);
+            border-radius: 2px;
+            position: relative;
+            margin-bottom: 12px;
+        }
+
+        .hi-thumb {
+            position: absolute;
+            top: -5px;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid var(--green);
+            transform: translateX(-50%);
+            transition: left .8s cubic-bezier(.4,0,.2,1);
+        }
+
+        .hi-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .hi-badge {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 3px 10px;
+            border: 1px solid var(--green);
+            color: var(--green);
+            border-radius: 2px;
+            transition: all .4s;
+        }
+
+        .hi-note { font-size: 11px; color: var(--mid); }
+
+        /* ── FORECAST ── */
+        .forecast-wrap {
+            overflow-x: auto;
+            margin: 0 -22px;
+            padding: 0 22px;
+        }
+        .forecast-wrap::-webkit-scrollbar { height: 2px; }
+        .forecast-wrap::-webkit-scrollbar-thumb { background: var(--border); }
+
+        .forecast-row {
+            display: flex;
+            gap: 1px;
+            min-width: max-content;
+        }
+
+        .fc-day {
+            flex: 0 0 60px;
+            background: var(--panel);
+            padding: 10px 8px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .fc-day.today { border-top: 2px solid var(--green); }
+
+        .fc-label { font-size: 9px; text-transform:uppercase; letter-spacing:.5px; color:var(--mid); }
+        .fc-max   { font-size: 18px; font-weight: 700; font-family: 'Courier New', monospace; }
+        .fc-min   { font-size: 12px; color: var(--mid); font-family: 'Courier New', monospace; }
+        .fc-pre   { font-size: 9px; color: #4a9eff; }
+
+        /* ── DEVICE ── */
+        .device-vis {
+            height: 88px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+
+        .device-core {
+            width: 52px; height: 52px;
+            border: 1.5px solid var(--green);
+            border-radius: 3px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,255,65,.03);
+            z-index: 2;
+        }
+
+        .device-core span {
+            font-size: 7px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--green);
+            line-height: 1.4;
+        }
+
+        #flow-track {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        @keyframes flowRight {
+            0%   { left: -10px; opacity: 0; }
+            8%   { opacity: .9; }
+            92%  { opacity: .9; }
+            100% { left: 110%; opacity: 0; }
+        }
+
+        .p-dot {
+            position: absolute;
+            border-radius: 50%;
+            animation: flowRight linear infinite;
+        }
+
+        .device-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1px;
+            background: var(--border);
+        }
+
+        .dg-item {
+            background: var(--black);
+            padding: 9px 12px;
+        }
+
+        .dg-label { font-size: 9px; text-transform:uppercase; letter-spacing:.5px; color:var(--mid); margin-bottom:3px; }
+        .dg-val   { font-size: 14px; font-weight: 700; font-family: 'Courier New', monospace; }
+        .dg-val.green { color: var(--green); }
+
+        /* ── LOG ── */
+        #log-card {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        #log-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 22px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        #log-body::-webkit-scrollbar { width: 3px; }
+        #log-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+        .log-line {
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            color: var(--green);
+            line-height: 1.6;
+            animation: fadeIn .3s ease;
+        }
+
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+        .log-line .ts  { color: var(--mid); margin-right: 8px; }
+        .log-line .tag { font-weight: 700; margin-right: 6px; }
+        .log-line.warn { color: #ffe600; }
+        .log-line.warn .tag { color: #ff8c00; }
+        .log-line.err  { color: #ff5555; }
+
+        /* ── LOADING ── */
+        #loading {
+            position: fixed; inset: 0;
+            background: var(--black);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            z-index: 9999;
+            transition: opacity .5s;
+        }
+
+        .l-brand { font-size: 28px; font-weight: 800; }
+        .l-msg   { font-size: 12px; color: var(--mid); }
+
+        .spinner {
+            width: 20px; height: 20px;
+            border: 1.5px solid var(--border);
+            border-top-color: var(--green);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+        }
+
+        @keyframes spin { to{ transform: rotate(360deg); } }
+
+        /* ── ERROR BANNER ── */
+        #err-banner {
+            display: none;
+            background: #1a0a0a;
+            border: 1px solid #ff4444;
+            color: #ff8888;
+            font-size: 12px;
+            padding: 10px 22px;
+            text-align: center;
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 860px) {
+            #body { grid-template-columns: 1fr; grid-template-rows: 40vh 1fr; }
+            #sidebar { border-left: none; border-top: 1px solid var(--border); overflow-y: auto; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="loading">
+    <div class="l-brand">ECO.N</div>
+    <div class="spinner"></div>
+    <div class="l-msg" id="l-msg">Connecting to weather API…</div>
+</div>
+
+<div id="shell">
+    <div id="topbar">
+        <div class="tb-brand">
+            <div class="dot"></div>
+            ECO.N
+        </div>
+        <div class="tb-sub">Urban Bio-Cooling Network · Taldykorgan, KZ</div>
+        <div class="tb-right" id="clock">--:--:--</div>
+    </div>
+
+    <div id="body">
+        <div id="map-wrap"><div id="map"></div></div>
+
+        <div id="sidebar">
+            <div id="err-banner" id="err-banner">
+                ⚠ Weather data unavailable. Check your internet connection and reload.
+            </div>
+
+            <!-- WEATHER -->
+            <div class="card">
+                <div class="card-title">Live Weather</div>
+                <div class="weather-main">
+                    <div class="temp-big"><span id="w-temp">--</span><span class="deg">°C</span></div>
+                    <div class="weather-meta">
+                        <div class="w-city">Taldykorgan</div>
+                        <div class="w-cond" id="w-cond">--</div>
+                        <div class="w-coords">45.016°N 78.373°E</div>
+                    </div>
+                </div>
+                <div class="weather-stats">
+                    <div class="ws-item">
+                        <div class="ws-label">Humidity</div>
+                        <div class="ws-val" id="w-hum">--%</div>
+                    </div>
+                    <div class="ws-item">
+                        <div class="ws-label">Wind</div>
+                        <div class="ws-val" id="w-wind">--</div>
+                    </div>
+                    <div class="ws-item">
+                        <div class="ws-label">Feels like</div>
+                        <div class="ws-val" id="w-feel">--°C</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- HEAT INDEX -->
+            <div class="card">
+                <div class="card-title">Heat Stress Index</div>
+                <div class="hi-track">
+                    <div class="hi-thumb" id="hi-thumb" style="left:0%"></div>
+                </div>
+                <div class="hi-row">
+                    <div class="hi-badge" id="hi-badge">--</div>
+                    <div class="hi-note" id="hi-note">--</div>
+                </div>
+            </div>
+
+            <!-- FORECAST -->
+            <div class="card">
+                <div class="card-title">7-Day Forecast</div>
+                <div class="forecast-wrap">
+                    <div class="forecast-row" id="forecast-row"></div>
+                </div>
+            </div>
+
+            <!-- DEVICE -->
+            <div class="card">
+                <div class="card-title">MOSS-200 · Evaporative Bio-Cooler</div>
+                <div class="device-vis">
+                    <div id="flow-track"></div>
+                    <div class="device-core">
+                        <span>MOSS</span>
+                        <span>FILTER</span>
+                    </div>
+                </div>
+                <div class="device-grid">
+                    <div class="dg-item">
+                        <div class="dg-label">Technology</div>
+                        <div class="dg-val">Evaporative</div>
+                    </div>
+                    <div class="dg-item">
+                        <div class="dg-label">Coverage</div>
+                        <div class="dg-val">200 m radius</div>
+                    </div>
+                    <div class="dg-item">
+                        <div class="dg-label">Est. cooling</div>
+                        <div class="dg-val green" id="ds-cool">-- °C</div>
+                    </div>
+                    <div class="dg-item">
+                        <div class="dg-label">Unit status</div>
+                        <div class="dg-val green" id="ds-status">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOG -->
+            <div class="card" id="log-card">
+                <div class="card-title">System Log</div>
+                <div id="log-body"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ── CONFIG ────────────────────────────────────────────────────
+const LAT = 45.016, LNG = 78.373;
+
+const WMO = {
+    0:'Clear sky', 1:'Mainly clear', 2:'Partly cloudy', 3:'Overcast',
+    45:'Fog', 48:'Freezing fog', 51:'Light drizzle', 53:'Drizzle',
+    55:'Heavy drizzle', 61:'Light rain', 63:'Moderate rain', 65:'Heavy rain',
+    71:'Light snow', 73:'Moderate snow', 75:'Heavy snow',
+    80:'Showers', 81:'Rain showers', 82:'Heavy showers',
+    95:'Thunderstorm', 96:'Thunderstorm + hail', 99:'Thunderstorm + hail'
+};
+
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+// ── CLOCK ─────────────────────────────────────────────────────
+function initClock() {
+    const el = document.getElementById('clock');
+    function tick() {
+        const n = new Date();
+        el.textContent = [n.getHours(), n.getMinutes(), n.getSeconds()]
+            .map(v => String(v).padStart(2,'0')).join(':');
+    }
+    tick(); setInterval(tick, 1000);
+}
+
+// ── MAP ───────────────────────────────────────────────────────
+function initMap() {
+    const map = L.map('map', { zoomControl: true }).setView([LAT, LNG], 14);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap © CARTO', maxZoom: 19
+    }).addTo(map);
+
+    // Project location
+    L.divIcon && L.marker([LAT, LNG], {
+        icon: L.divIcon({
+            className: '',
+            html: `<div style="width:12px;height:12px;background:#00ff41;border-radius:50%;
+                   box-shadow:0 0 14px #00ff41;border:2px solid #fff;"></div>`,
+            iconSize:[12,12], iconAnchor:[6,6]
+        })
+    }).addTo(map).bindPopup('<b>ECO.N Pilot Site</b><br>Taldykorgan, Kazakhstan');
+
+    // Urban heat zones — real neighborhoods, no fake temps
+    [
+        { lat:45.016, lng:78.373, name:'City Centre' },
+        { lat:45.034, lng:78.349, name:'Industrial Zone' },
+        { lat:44.996, lng:78.392, name:'South Residential' }
+    ].forEach(z => {
+        L.circle([z.lat, z.lng], {
+            radius:300, color:'#ff4400', weight:1,
+            opacity:.4, fillOpacity:.05, fillColor:'#ff4400'
+        }).addTo(map).bindPopup(`<b>${z.name}</b><br>Urban heat monitoring zone`);
+    });
+}
+
+// ── WEATHER API ───────────────────────────────────────────────
+async function fetchWeather() {
+    const base = 'https://api.open-meteo.com/v1/forecast';
+    const params = [
+        `latitude=${LAT}`,`longitude=${LNG}`,
+        'current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m',
+        'daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum',
+        'timezone=Asia%2FAlmaty',
+        'forecast_days=7'
+    ].join('&');
+
+    const r = await fetch(`${base}?${params}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+}
+
+// ── HEAT STRESS ───────────────────────────────────────────────
+// Based on NOAA / WHO heat index classification
+function heatStress(feelsLike) {
+    if (feelsLike < 27) return { label:'Normal',   note:'No significant heat stress',          pct: Math.max(2, (feelsLike/27)*28), color:'#00ff41' };
+    if (feelsLike < 32) return { label:'Caution',  note:'Fatigue with prolonged exposure',      pct: 40, color:'#aaff00' };
+    if (feelsLike < 38) return { label:'Warning',  note:'Heat exhaustion possible',             pct: 58, color:'#ffe600' };
+    if (feelsLike < 44) return { label:'Danger',   note:'Heat stroke likely without action',    pct: 77, color:'#ff8c00' };
+                        return { label:'Extreme',  note:'Life-threatening heat conditions',     pct: 93, color:'#ff2200' };
+}
+
+// ── STULL WET-BULB APPROXIMATION (2011) ──────────────────────
+// Used to estimate evaporative cooling delta
+// Stull, R. (2011). J. Appl. Meteor. Climatol. 50, 2267–2269.
+function wetBulb(T, RH) {
+    return T * Math.atan(0.151977 * Math.pow(RH + 8.313659, 0.5))
+         + Math.atan(T + RH)
+         - Math.atan(RH - 1.676331)
+         + 0.00391838 * Math.pow(RH, 1.5) * Math.atan(0.023101 * RH)
+         - 4.686035;
+}
+
+function estimateCooling(T, RH) {
+    const Tw = wetBulb(T, RH);
+    // Typical evaporative cooler efficiency: 75-90%, using 0.80 as conservative estimate
+    const delta = (T - Tw) * 0.80;
+    return Math.max(0, delta).toFixed(1);
+}
+
+// ── PARTICLES ─────────────────────────────────────────────────
+let pTimer = null;
+
+function spawnParticles(temp) {
+    const track = document.getElementById('flow-track');
+    track.innerHTML = '';
+    if (pTimer) clearInterval(pTimer);
+
+    const count   = temp < 25 ? 3 : temp < 32 ? 6 : temp < 40 ? 9 : 12;
+    const dur     = temp < 25 ? 4 : temp < 32 ? 2.8 : temp < 40 ? 1.8 : 1.2;
+    const colIn   = temp < 28 ? '#888' : temp < 36 ? '#ff8c00' : '#ff3300';
+    const colOut  = '#00ff41';
+    const h       = track.offsetHeight || 88;
+
+    function make() {
+        const el = document.createElement('div');
+        el.className = 'p-dot';
+        const s   = 3 + Math.random() * 4;
+        const y   = 8 + Math.random() * (h - 16);
+        const d   = dur * (0.7 + Math.random() * 0.6);
+        const del = Math.random() * d;
+        el.style.cssText = `
+            width:${s}px; height:${s}px; top:${y}px;
+            background:${colIn}; box-shadow:0 0 5px ${colIn};
+            animation-duration:${d}s; animation-delay:-${del}s;`;
+        track.appendChild(el);
+        // Switch colour at midpoint
+        setTimeout(() => {
+            if (el.parentNode) {
+                el.style.background  = colOut;
+                el.style.boxShadow   = `0 0 5px ${colOut}`;
+            }
+        }, Math.max(0, (d * 0.5 - del) * 1000));
+    }
+
+    for (let i = 0; i < count; i++) make();
+    pTimer = setInterval(make, 900);
+}
+
+// ── LOG ───────────────────────────────────────────────────────
+function log(msg, type = 'info') {
+    const body = document.getElementById('log-body');
+    const n    = new Date();
+    const ts   = [n.getHours(), n.getMinutes(), n.getSeconds()]
+                     .map(v => String(v).padStart(2,'0')).join(':');
+    const tagMap = { info:'INFO', warn:'WARN', err:'ERR ' };
+
+    const line = document.createElement('div');
+    line.className = `log-line ${type === 'info' ? '' : type}`;
+    line.innerHTML = `<span class="ts">${ts}</span><span class="tag">${tagMap[type]||'INFO'}</span>${msg}`;
+    body.appendChild(line);
+    body.scrollTop = body.scrollHeight;
+    while (body.children.length > 40) body.firstChild.remove();
+}
+
+// ── RENDER ────────────────────────────────────────────────────
+function render(data) {
+    const c   = data.current;
+    const T   = Math.round(c.temperature_2m);
+    const RH  = Math.round(c.relative_humidity_2m);
+    const Tf  = Math.round(c.apparent_temperature);
+    const W   = Math.round(c.wind_speed_10m);
+    const cod = c.weather_code;
+
+    // Weather
+    document.getElementById('w-temp').textContent = T;
+    document.getElementById('w-cond').textContent = WMO[cod] ?? 'Unknown';
+    document.getElementById('w-hum').textContent  = RH + '%';
+    document.getElementById('w-wind').textContent = W + ' km/h';
+    document.getElementById('w-feel').textContent = Tf + '°C';
+
+    // Heat stress
+    const hs = heatStress(Tf);
+    document.getElementById('hi-thumb').style.left   = hs.pct + '%';
+    document.getElementById('hi-badge').textContent  = hs.label;
+    document.getElementById('hi-badge').style.color  = hs.color;
+    document.getElementById('hi-badge').style.borderColor = hs.color;
+    document.getElementById('hi-note').textContent   = hs.note;
+
+    // Forecast
+    const daily = data.daily;
+    const fRow  = document.getElementById('forecast-row');
+    fRow.innerHTML = '';
+    for (let i = 0; i < daily.time.length; i++) {
+        const d   = new Date(daily.time[i] + 'T00:00');
+        const max = Math.round(daily.temperature_2m_max[i]);
+        const min = Math.round(daily.temperature_2m_min[i]);
+        const pre = daily.precipitation_sum[i];
+        const el  = document.createElement('div');
+        el.className = 'fc-day' + (i === 0 ? ' today' : '');
+        el.innerHTML = `
+            <div class="fc-label">${i === 0 ? 'Today' : DAYS[d.getDay()]}</div>
+            <div class="fc-max">${max}°</div>
+            <div class="fc-min">${min}°</div>
+            ${pre > 0 ? `<div class="fc-pre">${pre}mm</div>` : ''}`;
+        fRow.appendChild(el);
+    }
+
+    // Device
+    const cool = estimateCooling(T, RH);
+    const status = T > 35 ? 'High Load' : T > 25 ? 'Active' : 'Standby';
+    document.getElementById('ds-cool').textContent   = `–${cool} °C`;
+    document.getElementById('ds-status').textContent = status;
+
+    // Particles
+    spawnParticles(T);
+
+    // Log
+    log(`Weather updated — ${T}°C, ${WMO[cod]??'Unknown'}, RH ${RH}%, Wind ${W} km/h`);
+    if (hs.label !== 'Normal') log(`Heat stress: ${hs.label} — ${hs.note}`, 'warn');
+    log(`Estimated evaporative cooling: –${cool}°C (Stull 2011, η=0.80)`);
+}
+
+// ── BOOT ─────────────────────────────────────────────────────
+(async function boot() {
+    initClock();
+    initMap();
+
+    try {
+        document.getElementById('l-msg').textContent = 'Fetching live weather from Open-Meteo…';
+        const data = await fetchWeather();
+
+        // Hide loader
+        const ldr = document.getElementById('loading');
+        ldr.style.opacity = '0';
+        setTimeout(() => ldr.remove(), 600);
+
+        render(data);
+        log('Dashboard ready. Source: open-meteo.com (ECMWF/NOAA, no API key required)');
+
+        // Auto-refresh every 10 min
+        setInterval(async () => {
+            try {
+                render(await fetchWeather());
+            } catch (e) {
+                log('Refresh error: ' + e.message, 'warn');
+            }
+        }, 600_000);
+
+    } catch (err) {
+        // Show error state with clear message
+        const ldr = document.getElementById('loading');
+        ldr.style.opacity = '0';
+        setTimeout(() => ldr.remove(), 300);
+
+        document.getElementById('err-banner').style.display = 'block';
+        log(`Cannot reach Open-Meteo API: ${err.message}`, 'err');
+        log('This file must be opened in a browser with internet access.', 'warn');
+        log('File path: open eco-n-dashboard.html directly in Chrome / Firefox / Edge', 'warn');
+    }
+})();
+</script>
+</body>
+</html>
